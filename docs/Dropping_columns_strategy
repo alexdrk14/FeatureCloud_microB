@@ -1,0 +1,57 @@
+
+=========================================================
+[A.] How to deal with NaNs and columns with low entropy
+=========================================================
+
+[1.] If a column is full of NaNs in one client
+then it will create problems to the local model.
+An "international" imputation is risky and also 
+not possible because of the privacy of the data.
+
+If it is to be removed, then it should be removed
+from all clients.
+
+[2.] If a column has only one or two values 
+in one client, then it might not bring lots of
+descriptive information to the local model,
+but other clients might have many values in this column.
+That means that the column should not be deleted 
+deliberately. But if the aggregator can gather
+this information from all the clients, and each
+client declares that this column is not important
+for his model, then the aggregator can send the 
+signal that this column can be removed from all 
+of them - and his model as well.
+
+Criterion => high entropy - the threshold can be 
+defined individually
+
+This is a process that needs to be repeated 
+continuously, because data will change
+
+[3.] If a column contains some NaNs (<50% of its rows 
+are NaNs), then we can follow the two strategies:
+
+[3.1.] remove the rows completely
+or
+[3.2.] impute the values
+
+==> We can have a column inserted in only one client,
+that does not exist to the others?
+
+=========================================================
+[B.] How can we impute the values
+=========================================================
+
+[1.] Continuous values - impute the median
+[2.] Categorical - for ordinal and non-ordinal 
+     take the most frequent values
+     
+=========================================================
+[C.] How many performance history entries are kept 
+     in each client
+=========================================================
+     
+
+
+
