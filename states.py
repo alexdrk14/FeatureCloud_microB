@@ -3,10 +3,14 @@ from FeatureCloud.app.engine.app import State as op_state
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
+from imblearn.under_sampling import RandomUnderSampler
+from collections import Counter
+from scipy.stats import entropy
 import pandas as pd
 import numpy as np
 
 MAX_ITER = 10
+ENTROPY_THRESHOLD = 0.08079313589591118
 
 # FeatureCloud requires that apps define the at least the 'initial' state.
 # This state is executed after the app instance is started.
@@ -27,13 +31,58 @@ class model_init(AppState):
 
     def run(self):
         """Read Data"""
-        data = pd.read_csv("/mnt/input/data.csv")
+        data_path = "/mnt/input/"
+        df_anno = pd.read_csv(data_path + 'anno.csv')
+        df_exp = pd.read_csv(data_path + 'exp.csv')
+        df_exp.columns = ['sample'] + df_exp.columns.to_list()[1:]
+        data = pd.merge(df_anno, df_exp, on='sample')
+        country = data['country'][0]
+        self.store('country', country)
+        data = data[data['class'].isin(['CRC', 'healthy'])]
+
         """Drop first column and keep target separetely"""
-        target = data['target']
-        data.drop([data.columns.to_list()[0], 'target'], inplace=True, axis=1)
+        target = data['class'] == 'CRC'
+        target = [1 if value else 0 for value in target]#data['class'].astype('category').cat.code
+        drop_features = ['class', 'sample', 'HQ_clean_read_count', 'gut_mapped_read_count',
+                         'gut_mapped_pc', 'oral_mapped_read_count', 'oral_mapped_pc', 'low_read',
+                         'low_map', 'excluded', 'excluded_comment', 'sel_Beghini_2021',
+                         'study_accession', 'sample_accession', 'secondary_sample_accession',
+                         'instrument_platform','instrument_model', 'library_layout','sample_alias',
+                         'mgp_sample_alias','westernised','country','individual_id','timepoint','body_site','body_subsite',
+                         'host_phenotype', 'host_subphenotype', 'to_exclude']
+
+        data['health_status'] = [1 if value == 'P' else 0 for value in data['health_status']] #data['health_status'] == 'P'
+        data['gender'] = [1 if value == 'male' else 0 for value in data['gender']] # data['gender'] == 'male'
+        data.drop(drop_features, inplace=True, axis=1)
+
+        """Data Undersampling"""
+        undersampler = RandomUnderSampler(sampling_strategy='majority')
+        X, Y = undersampler.fit_resample(data, target)
+        #X = X.replace(np.nan, 0)
+        drop_out = []
+        for feature in X.columns.to_list():
+            if np.isnan(X[feature]).any():
+                values = [value for value in X[feature] if value != np.nan]
+                if len(values) == 0 or len(values) < X.shape[0] / 2 or (
+                        entropy([value/len(values) for value in values], base=2) < ENTROPY_THRESHOLD) :
+                    drop_out.append(feature)
+                else:
+                    """Value embute"""
+                    self.log(
+                        f'IMPORTANT we embute feature:{feature}',
+                        LogLevel.DEBUG)
+
+                    if type(values[0]) == np.float64:
+                        """In case of float values imbute NaN with avg value"""
+                        new_value = sum(values)/len(values)
+                    else:
+                        new_value = Counter(values).most_common(1)[0][0]
+                    X[feature] = X[feature].replace(np.nan, new_value)
+
+        self.log(f'After undersampling country:{country} has data shape:{X.shape} feature to drop:{drop_out}', LogLevel.DEBUG)
 
         """Split data into train and test with random shuffle"""
-        X_train, X_test, y_train, y_test = train_test_split(data, target,
+        X_train, X_test, y_train, y_test = train_test_split(X, Y,
                                                             test_size=0.2, shuffle=True)
 
         """Store test data into shared memory for future usage"""
@@ -41,7 +90,7 @@ class model_init(AppState):
         self.store("y_test", y_test)
 
         """Create model , train on training data portion and store model parameters"""
-        model = LogisticRegression(random_state=2)
+        model = LogisticRegression(max_iter=50000, random_state=2)
         model.fit(X_train, y_train)
         model_params = {"coef": model.coef_,
                         "intercept": model.intercept_,
@@ -51,6 +100,7 @@ class model_init(AppState):
 
         """measure number of federated model iterations"""
         self.store("iteration", 0)
+        self.log(f'Predicted Y:{model.predict(X_test)} with all data shape:{X.shape} country:{country}', LogLevel.DEBUG)
 
         msre = mean_squared_error(y_test, model.predict(X_test))
         self.store("model_error", msre)
@@ -106,7 +156,7 @@ class participant_get_data(AppState):
         model_params["classes"] = model_params["classes"][ind]
 
         """Update model coef, intercept and class"""
-        model = LogisticRegression(random_state=2)
+        model = LogisticRegression(max_iter=50000, random_state=2)
         model.coef_ = model_params["coef"]
         model.intercept_ = model_params["intercept"]
         model.classes_ = model_params["classes"]
