@@ -2,3 +2,5 @@ featurecloud
 sklearn
 pandas
 imblearn
+matplotlib
+seaborn
