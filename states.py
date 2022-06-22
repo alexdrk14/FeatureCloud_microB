@@ -16,7 +16,7 @@ from model import Model
 
 
 """Global variables for manipulating some functionality of clients"""
-MAX_ITER = 10
+MAX_ITER = 50
 ENTROPY_THRESHOLD = 0.08079313589591118
 SAMPLING = "Over" #"Under" "Over"
 
@@ -35,7 +35,7 @@ class InitialState(AppState):
 class model_init(AppState):
 
     def register(self):
-        self.register_transition('p_measure', Role.BOTH)
+        self.register_transition('fine-tuning', Role.BOTH)
 
     def run(self):
         """Read Data"""
@@ -95,10 +95,43 @@ class model_init(AppState):
         self.store("number_of_samples", X_train.shape[0])
         #self.log(f'----3-------',
         #         LogLevel.DEBUG)
+        return "fine-tuning"
+
+@app_state('fine-tuning', role=Role.BOTH)
+class model_init(AppState):
+
+    def register(self):
+        self.register_transition('TODO', Role.BOTH)
+
+    def run(self):
+        """Load train data"""
+        X = self.load("x_train")
+        Y = self.load("y_train")
+
+        params = {"penalty": ['l2', 'l1'],
+                  "alpha": np.arange(0.00001, 0.0005, 0.00004)}
+        params_performance = {}
+        for penalty in params["penalty"]:
+            for alpha in params["alpha"]:
+                model = Model(penalty=penalty, alpha=alpha)
+                X_train, X_val, y_train, y_val = train_test_split(X, Y,
+                                                                    test_size=0.2,
+                                                                    shuffle=True,
+                                                                    stratify=Y)
+                model.fit(X_train, y_train)
+                mi, conf_matrix, recall = model.measure_performance(X_val, y_val)
+                params_performance[f'{penalty}-{alpha}'] = mi
+
         """Create model , train on training data portion and store model parameters"""
         model = Model()
         model.fit(X_train, y_train)
         model_params = model.get_params()
+
+        #imp_features = X_train.columns[model_params["coef"][0] != 0].to_list()
+        #
+        #self.log(f'Important:{imp_features} len: {len(imp_features)} all {X_train.shape[1]}',
+        #         LogLevel.DEBUG)
+
         #self.log(f'----4-------',
         #         LogLevel.DEBUG)
         """
@@ -151,11 +184,12 @@ class p_measure(AppState):
             model_params = self.await_data(n=1, unwrap=True)
             best_recall = self.load("recall")
             best_mi = self.load("mi")
+            old_model_params = self.load("model_params")
             model.set_params(model_params)
             """Re-train model in their own data until last iteration. 
             At the last iteration use only federated coef"""
-            if iteration != (MAX_ITER -1):
-                model.fit(X_train, y_train)
+            if iteration != (MAX_ITER - 1):
+                model.partial_fit(X_train, y_train)
 
         #self.log(f'Test data before measuring performance{X_test}', LogLevel.DEBUG)
         #self.log(f'Classes{model.model.classes_}', LogLevel.DEBUG)
@@ -170,7 +204,8 @@ class p_measure(AppState):
             return 'terminal'
         if iteration != 0:
             """Check if previous model params provide better recall that new"""
-            if recall > best_recall or mi > best_mi or iteration == (MAX_ITER -1):#msre < prev_msre:
+            #if recall > best_recall or mi > best_mi or iteration == (MAX_ITER -1):#msre < prev_msre:
+            if mi > best_mi or iteration == MAX_ITER:  # msre < prev_msre:
                 """If new params provide lower error use them"""
                 """In case last iteration :
                 should force model to keep federated params only without re-training"""
@@ -182,6 +217,7 @@ class p_measure(AppState):
             else:
                 self.log(f'Keep old params and recall',
                          LogLevel.DEBUG)
+                model.set_params(old_model_params)
         else:
             self.store("recall", recall)
             self.store("mi", mi)
@@ -237,10 +273,15 @@ class Agg(AppState):
         #        f'Classes : {item["classes"]}',
         #        LogLevel.DEBUG)
 
-        all_samples = sum([client_data["number_of_samples"] for client_data in recieved_data])
-        new_coef = np.array([sum([client_data["coef"][0] * client_data["number_of_samples"] for client_data in recieved_data]) / all_samples])
-        new_inter = np.array([sum([client_data["intercept"][0] * client_data["number_of_samples"] for client_data in recieved_data]) / all_samples])
-        #self.log(f'New coef {new_coef} and inter:{new_inter}', LogLevel.DEBUG)
+        #all_samples = sum([client_data["number_of_samples"] for client_data in recieved_data])
+        #new_coef = np.array([sum([client_data["coef"][0] * client_data["number_of_samples"] for client_data in recieved_data]) / all_samples])
+        #new_inter = np.array([sum([client_data["intercept"][0] * client_data["number_of_samples"] for client_data in recieved_data]) / all_samples])
+
+
+        new_coef = np.array([sum([client_data["coef"][0] for client_data in
+                                  recieved_data]) / len(recieved_data)])
+        new_inter = np.array([sum([client_data["intercept"][0] for client_data in
+                                   recieved_data]) / len(recieved_data)])
 
         """
         for class_v in all_classes:

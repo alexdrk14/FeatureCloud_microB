@@ -3,12 +3,17 @@ from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.metrics import mutual_info_score, confusion_matrix, recall_score
 
 class Model:
-    def __init__(self, max_iter=50000):
-        self.model = SGDClassifier(max_iter=max_iter)#LogisticRegression(max_iter=max_iter)
+    def __init__(self,penalty, alpha, max_iter=50000):
+        self.model = SGDClassifier(penalty=penalty,
+                                   alpha=alpha,
+                                   max_iter=max_iter)#LogisticRegression(max_iter=max_iter)
 
 
     def fit(self, X, Y):
         self.model.fit(X, Y)
+
+    def partial_fit(self, X, Y):
+        self.model.partial_fit(X,Y)
 
     def get_params(self):
         return {"coef": self.model.coef_,

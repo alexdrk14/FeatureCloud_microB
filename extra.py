@@ -96,8 +96,8 @@ def plot_confusion(conf_matrix: np.array, country: str, iteration:int):
         ax.set_xlabel('\nPredicted Values', fontsize=28, fontweight='bold')
         ax.set_ylabel('Actual Values ', fontsize=28, fontweight='bold')
 
-        ax.xaxis.set_ticklabels(['non-fatal', 'fatal'], fontsize=28, fontweight='bold')
-        ax.yaxis.set_ticklabels(['non-fatal', 'fatal'], fontsize=28, fontweight='bold')
+        ax.xaxis.set_ticklabels(['Healthy', 'CRC'], fontsize=28, fontweight='bold')
+        ax.yaxis.set_ticklabels(['Healthy', 'CRC'], fontsize=28, fontweight='bold')
 
         plt.show()
         fig.savefig(OUTPUT_PATH + f"confusion_matrix_{country}_iter{iteration}.png")
