@@ -1,6 +1,6 @@
 """Model libraries"""
 from sklearn.linear_model import LogisticRegression, SGDClassifier
-from sklearn.metrics import mutual_info_score, confusion_matrix, recall_score
+from sklearn.metrics import mutual_info_score, confusion_matrix, recall_score, f1_score
 
 class Model:
     def __init__(self,penalty, alpha, max_iter=50000):
@@ -44,6 +44,7 @@ class Model:
         mi = mutual_info_score(Y, Y_pred)
         conf_matrix = confusion_matrix(Y, Y_pred)
         recall = recall_score(Y, Y_pred)
+        f1 = f1_score(Y, Y_pred)
 
-        return mi, conf_matrix, recall
+        return mi, conf_matrix, recall, f1
 
